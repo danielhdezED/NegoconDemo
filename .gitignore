@@ -1,0 +1,41 @@
+# -------------------------
+# Gradle / Kotlin
+# -------------------------
+.gradle/
+**/.gradle/
+.kotlin/
+**/.kotlin/
+**/build/
+**/out/
+
+# -------------------------
+# Android
+# -------------------------
+local.properties
+.externalNativeBuild/
+.cxx/
+captures/
+
+# -------------------------
+# IDE
+# -------------------------
+.idea/
+*.iml
+
+# -------------------------
+# iOS / Xcode (si tienes iosApp)
+# -------------------------
+DerivedData/
+xcuserdata/
+*.xcuserstate
+*.xcworkspace
+
+# -------------------------
+# macOS
+# -------------------------
+.DS_Store
+
+# -------------------------
+# Node (si usas KMP + JS)
+# -------------------------
+node_modules/
