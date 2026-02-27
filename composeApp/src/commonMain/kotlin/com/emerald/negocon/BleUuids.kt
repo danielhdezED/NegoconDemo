@@ -13,3 +13,5 @@ object BleUuids {
 expect fun createServiceFilter(serviceUuid: String): ServiceFilter
 
 expect fun uuidToString(uuid: Uuid): String
+
+expect fun extractManufacturerIds(raw: Any?): Set<Int>

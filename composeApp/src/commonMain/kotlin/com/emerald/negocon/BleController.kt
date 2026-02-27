@@ -30,15 +30,9 @@ class BleController(private val blueFalcon: BlueFalcon) : BlueFalconDelegate {
     val compatibilityStatus = mutableStateMapOf<String, CompatibilityStatus>()
 
     enum class CompatibilityStatus {
-        Pending,
-        Checking,
         Compatible,
         Incompatible
     }
-
-    private val probeQueue = ArrayDeque<BluetoothPeripheral>()
-    private var probingPeripheral: BluetoothPeripheral? = null
-    private var manualPeripheral: BluetoothPeripheral? = null
 
     var isScanning by mutableStateOf(false)
         private set
@@ -75,8 +69,6 @@ class BleController(private val blueFalcon: BlueFalcon) : BlueFalconDelegate {
             blueFalcon.clearPeripherals()
             devices.clear()
             compatibilityStatus.clear()
-            probeQueue.clear()
-            probingPeripheral = null
             blueFalcon.scan()
             isScanning = true
         } catch (exception: BluetoothPermissionException) {
@@ -99,9 +91,6 @@ class BleController(private val blueFalcon: BlueFalcon) : BlueFalconDelegate {
 
     fun selectPeripheral(peripheral: BluetoothPeripheral) {
         selectedPeripheral = peripheral
-        manualPeripheral = peripheral
-        probingPeripheral?.let { blueFalcon.disconnect(it) }
-        probingPeripheral = null
         if (isConnected(peripheral)) return
         services.clear()
         characteristicsByService.clear()
@@ -111,7 +100,6 @@ class BleController(private val blueFalcon: BlueFalcon) : BlueFalconDelegate {
     }
 
     fun disconnectSelected() {
-        manualPeripheral = null
         connectedPeripheral?.let { blueFalcon.disconnect(it) }
     }
 
@@ -127,38 +115,20 @@ class BleController(private val blueFalcon: BlueFalcon) : BlueFalconDelegate {
     }
 
     override fun didConnect(bluetoothPeripheral: BluetoothPeripheral) {
-        if (manualPeripheral?.uuid == bluetoothPeripheral.uuid) {
-            connectedPeripheral = bluetoothPeripheral
-            selectedPeripheral = bluetoothPeripheral
-            statusMessage = "Conectado a ${bluetoothPeripheral.name ?: "Dispositivo"}"
-            isScanning = false
-            blueFalcon.stopScanning()
-            blueFalcon.discoverServices(bluetoothPeripheral)
-        } else {
-            probingPeripheral = bluetoothPeripheral
-            compatibilityStatus[bluetoothPeripheral.uuid] = CompatibilityStatus.Checking
-            blueFalcon.discoverServices(bluetoothPeripheral)
-        }
+        connectedPeripheral = bluetoothPeripheral
+        selectedPeripheral = bluetoothPeripheral
+        statusMessage = "Conectado a ${bluetoothPeripheral.name ?: "Dispositivo"}"
+        isScanning = false
+        blueFalcon.stopScanning()
+        blueFalcon.discoverServices(bluetoothPeripheral)
     }
 
     override fun didDisconnect(bluetoothPeripheral: BluetoothPeripheral) {
-        if (manualPeripheral?.uuid == bluetoothPeripheral.uuid) {
-            manualPeripheral = null
-            connectedPeripheral = null
-            services.clear()
-            characteristicsByService.clear()
-            statusMessage = "Dispositivo desconectado"
-            return
-        }
         if (connectedPeripheral?.uuid == bluetoothPeripheral.uuid) {
             connectedPeripheral = null
             services.clear()
             characteristicsByService.clear()
             statusMessage = "Dispositivo desconectado"
-        }
-        if (probingPeripheral?.uuid == bluetoothPeripheral.uuid) {
-            probingPeripheral = null
-            processNextProbe()
         }
     }
 
@@ -172,11 +142,18 @@ class BleController(private val blueFalcon: BlueFalcon) : BlueFalconDelegate {
         } else {
             devices.add(bluetoothPeripheral)
         }
-        if (!compatibilityStatus.containsKey(bluetoothPeripheral.uuid)) {
-            compatibilityStatus[bluetoothPeripheral.uuid] = CompatibilityStatus.Pending
-            probeQueue.add(bluetoothPeripheral)
+        val manufacturerData = advertisementData[
+            dev.bluefalcon.AdvertisementDataRetrievalKeys.ManufacturerData
+        ]
+        val manufacturerIds = extractManufacturerIds(manufacturerData)
+        val status = if (isCompatibleManufacturer(manufacturerIds)) {
+            CompatibilityStatus.Compatible
+        } else {
+            CompatibilityStatus.Incompatible
         }
-        processNextProbe()
+        if (compatibilityStatus[bluetoothPeripheral.uuid] != status) {
+            compatibilityStatus[bluetoothPeripheral.uuid] = status
+        }
     }
 
     override fun didDiscoverServices(bluetoothPeripheral: BluetoothPeripheral) {
@@ -184,27 +161,14 @@ class BleController(private val blueFalcon: BlueFalcon) : BlueFalconDelegate {
         val hasTargetService = serviceList.any {
             uuidToString(it.uuid).equals(BleUuids.targetService, ignoreCase = true)
         }
-        if (manualPeripheral?.uuid == bluetoothPeripheral.uuid) {
-            if (!hasTargetService) {
-                statusMessage = "Dispositivo incompatible: servicio requerido no encontrado"
-                blueFalcon.disconnect(bluetoothPeripheral)
-                return
-            }
-            services.clear()
-            services.addAll(serviceList)
-            serviceList.forEach { service ->
-                blueFalcon.discoverCharacteristics(bluetoothPeripheral, service)
-            }
-            return
-        }
-        if (!hasTargetService) {
-            compatibilityStatus[bluetoothPeripheral.uuid] = CompatibilityStatus.Incompatible
-            blueFalcon.disconnect(bluetoothPeripheral)
-            return
-        }
         serviceList.forEach { service ->
             blueFalcon.discoverCharacteristics(bluetoothPeripheral, service)
         }
+        if (!hasTargetService) {
+            statusMessage = "Dispositivo incompatible: servicio requerido no encontrado"
+        }
+        services.clear()
+        services.addAll(serviceList)
     }
 
     override fun didDiscoverCharacteristics(bluetoothPeripheral: BluetoothPeripheral) {
@@ -213,22 +177,12 @@ class BleController(private val blueFalcon: BlueFalcon) : BlueFalconDelegate {
             .any {
                 uuidToString(it.uuid).equals(BleUuids.targetCharacteristic, ignoreCase = true)
             }
-        if (manualPeripheral?.uuid == bluetoothPeripheral.uuid) {
-            bluetoothPeripheral.characteristics.forEach { (serviceUuid, characteristics) ->
-                characteristicsByService[serviceUuid] = characteristics
-            }
-            if (!hasTargetCharacteristic) {
-                statusMessage = "Dispositivo incompatible: caracteristica requerida no encontrada"
-                blueFalcon.disconnect(bluetoothPeripheral)
-            }
-            return
+        bluetoothPeripheral.characteristics.forEach { (serviceUuid, characteristics) ->
+            characteristicsByService[serviceUuid] = characteristics
         }
-        compatibilityStatus[bluetoothPeripheral.uuid] = if (hasTargetCharacteristic) {
-            CompatibilityStatus.Compatible
-        } else {
-            CompatibilityStatus.Incompatible
+        if (!hasTargetCharacteristic) {
+            statusMessage = "Dispositivo incompatible: caracteristica requerida no encontrada"
         }
-        blueFalcon.disconnect(bluetoothPeripheral)
     }
 
     override fun didCharacteristcValueChanged(
@@ -243,27 +197,31 @@ class BleController(private val blueFalcon: BlueFalcon) : BlueFalconDelegate {
 
     private fun updateDevices(peripherals: Set<BluetoothPeripheral>) {
         val sorted = peripherals.sortedBy { it.name ?: it.uuid }
-        devices.clear()
-        devices.addAll(sorted)
-        sorted.forEach { peripheral ->
-            if (!compatibilityStatus.containsKey(peripheral.uuid)) {
-                compatibilityStatus[peripheral.uuid] = CompatibilityStatus.Pending
-                probeQueue.add(peripheral)
-            }
-        }
-        processNextProbe()
-    }
-
-    private fun processNextProbe() {
-        if (manualPeripheral != null) return
-        if (probingPeripheral != null) return
-        val next = probeQueue.removeFirstOrNull() ?: return
-        val status = compatibilityStatus[next.uuid]
-        if (status != null && status != CompatibilityStatus.Pending) {
-            processNextProbe()
+        if (devices.size == sorted.size && devices.zip(sorted).all { (left, right) -> left.uuid == right.uuid }) {
             return
         }
-        compatibilityStatus[next.uuid] = CompatibilityStatus.Checking
-        blueFalcon.connect(next, autoConnect = false)
+        devices.clear()
+        devices.addAll(sorted)
+    }
+
+    private fun isCompatibleManufacturer(manufacturerIds: Set<Int>): Boolean {
+        return manufacturerIds.contains(0x1200) || manufacturerIds.contains(0x3000)
+    }
+
+    private fun extractManufacturerIds(
+        advertisementData: Map<dev.bluefalcon.AdvertisementDataRetrievalKeys, Any>
+    ): Set<Int> {
+        val data = advertisementData[dev.bluefalcon.AdvertisementDataRetrievalKeys.ManufacturerData]
+        return when (data) {
+            is ByteArray -> parseManufacturerIdsFromBytes(data)
+            is Map<*, *> -> data.keys.filterIsInstance<Int>().toSet()
+            else -> emptySet()
+        }
+    }
+
+    private fun parseManufacturerIdsFromBytes(data: ByteArray): Set<Int> {
+        if (data.size < 2) return emptySet()
+        val manufacturerId = (data[0].toUByte().toInt() or (data[1].toUByte().toInt() shl 8))
+        return setOf(manufacturerId)
     }
 }

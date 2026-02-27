@@ -55,7 +55,7 @@ fun App() {
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Text(
-                text = "Blue Falcon Demo",
+                text = "Negocon Demo",
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.SemiBold
             )
@@ -141,8 +141,6 @@ private fun DeviceRow(
     val compatibilityLabel = when (compatibilityStatus) {
         BleController.CompatibilityStatus.Compatible -> "Compatible"
         BleController.CompatibilityStatus.Incompatible -> "No compatible"
-        BleController.CompatibilityStatus.Checking -> "Verificando"
-        BleController.CompatibilityStatus.Pending -> "Pendiente"
         null -> ""
     }
     val status = when {
