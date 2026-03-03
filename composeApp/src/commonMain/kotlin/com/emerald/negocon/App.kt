@@ -2,10 +2,10 @@
 
 package com.emerald.negocon
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -14,10 +14,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeContentPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.Divider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -46,7 +45,11 @@ fun App() {
         val compatibleDevices = controller.devices.filter {
             compatibility[it.uuid] == BleController.CompatibilityStatus.Compatible
         }
-        Column(
+        val firmwareProfile = controller.firmwareProfile
+        val sessionState = controller.sessionState
+        val bufferProgress = controller.bufferProgress
+        val lastLogSummary = controller.lastLogSummary
+        LazyColumn(
             modifier = Modifier
                 .background(MaterialTheme.colorScheme.primaryContainer)
                 .safeContentPadding()
@@ -54,75 +57,134 @@ fun App() {
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Text(
-                text = "Negocon Demo",
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.SemiBold
-            )
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Button(onClick = { controller.toggleScan() }) {
-                    Text(if (controller.isScanning) "Detener" else "Escanear")
-                }
-                Button(
-                    onClick = { controller.disconnectSelected() },
-                    enabled = connectedPeripheral != null
-                ) {
-                    Text("Desconectar")
-                }
-            }
-            AnimatedVisibility(statusMessage != null) {
+            item {
                 Text(
-                    text = statusMessage ?: "",
-                    style = MaterialTheme.typography.bodyMedium
+                    text = "Negocon Demo",
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.SemiBold
                 )
             }
-            Text(
-                text = "Dispositivos detectados",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Medium
-            )
-            LazyColumn(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(compatibleDevices, key = { it.uuid }) { peripheral ->
-                    DeviceRow(
-                        peripheral = peripheral,
-                        isSelected = selectedPeripheral?.uuid == peripheral.uuid,
-                        isConnected = controller.isConnected(peripheral),
-                        compatibilityStatus = compatibility[peripheral.uuid],
-                        onSelect = { controller.selectPeripheral(peripheral) }
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Button(onClick = { controller.toggleScan() }) {
+                        Text(if (controller.isScanning) "Detener" else "Escanear")
+                    }
+                    Button(
+                        onClick = { controller.disconnectSelected() },
+                        enabled = connectedPeripheral != null
+                    ) {
+                        Text("Desconectar")
+                    }
+                }
+            }
+            if (statusMessage != null) {
+                item {
+                    Text(
+                        text = statusMessage ?: "",
+                        style = MaterialTheme.typography.bodyMedium
                     )
                 }
             }
-            AnimatedVisibility(connectedPeripheral != null) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
+            if (connectedPeripheral != null) {
+                item {
+                    Card(modifier = Modifier.fillMaxWidth()) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Text(
+                                text = "Conectado",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                text = "Firmware: ${firmwareProfile.name}",
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                            Text(
+                                text = "Estado: ${sessionState.name}",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Button(onClick = { controller.collectData() }) {
+                                    Text("Obtener datos")
+                                }
+                                Button(onClick = { controller.deleteData() }) {
+                                    Text("Borrar datos")
+                                }
+                            }
+                            Text(
+                                text = "Spec: ${controller.deviceSpec?.profile ?: "null"}",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                            Text(
+                                text = "Read UUID: ${controller.resolvedReadUuid ?: "null"}",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                            if (bufferProgress.isNotEmpty()) {
+                                Text(
+                                    text = bufferProgress.entries.joinToString(
+                                        prefix = "Progreso: ",
+                                        separator = " | "
+                                    ) { "${it.key.name.lowercase()}: ${it.value}" },
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                            if (!lastLogSummary.isNullOrBlank()) {
+                                Text(
+                                    text = lastLogSummary ?: "",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            if (connectedPeripheral != null) {
+                item {
+                    Divider()
+                }
+                item {
                     Text(
                         text = "Servicios y caracteristicas",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Medium
                     )
-                    services.forEach { service ->
-                        ServiceCard(
-                            service = service,
-                            characteristics = characteristicsByService[service.uuid].orEmpty(),
-                            peripheral = connectedPeripheral,
-                            onRead = { characteristic ->
-                                connectedPeripheral?.let { controller.readCharacteristic(it, characteristic) }
-                            }
-                        )
-                    }
                 }
+                items(services, key = { it.uuid }) { service ->
+                    ServiceCard(
+                        service = service,
+                        characteristics = characteristicsByService[service.uuid].orEmpty(),
+                        peripheral = connectedPeripheral,
+                        onRead = { characteristic ->
+                            connectedPeripheral?.let { controller.readCharacteristic(it, characteristic) }
+                        }
+                    )
+                }
+            }
+            item {
+                Text(
+                    text = "Dispositivos detectados",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+            items(compatibleDevices, key = { it.uuid }) { peripheral ->
+                DeviceRow(
+                    peripheral = peripheral,
+                    isSelected = selectedPeripheral?.uuid == peripheral.uuid,
+                    isConnected = controller.isConnected(peripheral),
+                    compatibilityStatus = compatibility[peripheral.uuid],
+                    onSelect = { controller.selectPeripheral(peripheral) }
+                )
             }
         }
     }
@@ -222,12 +284,8 @@ private fun CharacteristicRow(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
+        Box(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.align(Alignment.CenterStart)) {
                 Text(
                     text = characteristic.name ?: "Caracteristica",
                     style = MaterialTheme.typography.bodyMedium
@@ -237,7 +295,11 @@ private fun CharacteristicRow(
                     style = MaterialTheme.typography.bodySmall
                 )
             }
-            TextButton(onClick = onRead, enabled = canRead) {
+            TextButton(
+                modifier = Modifier.align(Alignment.CenterEnd),
+                onClick = onRead,
+                enabled = canRead
+            ) {
                 Text("Leer")
             }
         }
