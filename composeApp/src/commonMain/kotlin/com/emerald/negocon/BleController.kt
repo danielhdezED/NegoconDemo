@@ -44,6 +44,10 @@ class BleController(private val blueFalcon: BlueFalcon) : BlueFalconDelegate {
         private set
     var statusMessage by mutableStateOf<String?>(null)
         private set
+    var wifiIpAddress by mutableStateOf<String?>(null)
+        private set
+    var wifiIpWarning by mutableStateOf<String?>(null)
+        private set
 
     private var discoveryJob: Job? = null
     private var discoveryInProgress = false
@@ -237,7 +241,7 @@ class BleController(private val blueFalcon: BlueFalcon) : BlueFalconDelegate {
         val payload = bluetoothCharacteristic.value
         val text = payload?.decodeToString()?.trim().orEmpty()
         if (text.isEmpty()) return
-        statusMessage = parseAckMessage(text) ?: text
+        handleAckPayload(text)
     }
 
     private fun findCharacteristic(
@@ -268,7 +272,7 @@ class BleController(private val blueFalcon: BlueFalcon) : BlueFalconDelegate {
         }
     }
 
-    private fun parseAckMessage(text: String): String? {
+    private fun handleAckPayload(text: String) {
         val ackMatch = Regex("\"ack\"\\s*:\\s*(true|false)", RegexOption.IGNORE_CASE)
             .find(text)
             ?.groupValues
@@ -282,16 +286,27 @@ class BleController(private val blueFalcon: BlueFalcon) : BlueFalconDelegate {
             .find(text)
             ?.groupValues
             ?.getOrNull(1)
+        val ipValue = Regex("\"ip\"\\s*:\\s*(null|\"([^\"]*)\")", RegexOption.IGNORE_CASE)
+            .find(text)
+        val ip = ipValue?.groupValues?.getOrNull(2)
+        val warn = Regex("\"warn\"\\s*:\\s*\"([^\"]+)\"")
+            .find(text)
+            ?.groupValues
+            ?.getOrNull(1)
+
+        wifiIpAddress = ip?.takeIf { it.isNotBlank() }
+        wifiIpWarning = warn
 
         if (error != null) {
-            return if (cmd != null) {
+            statusMessage = if (cmd != null) {
                 "Error al configurar ${cmd.lowercase()}: $error"
             } else {
                 "Error: $error"
             }
+            return
         }
 
-        return when (ackMatch) {
+        statusMessage = when (ackMatch) {
             "true" -> if (cmd?.lowercase() == "wifi") {
                 "WiFi configurado correctamente"
             } else {
@@ -302,7 +317,7 @@ class BleController(private val blueFalcon: BlueFalcon) : BlueFalconDelegate {
             } else {
                 "Comando rechazado"
             }
-            else -> null
+            else -> text
         }
     }
 
