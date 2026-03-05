@@ -6,12 +6,12 @@ import dev.bluefalcon.ServiceFilter
 import dev.bluefalcon.Uuid
 
 object BleUuids {
-    const val targetService = "00010000-0000-1000-8000-00805F9BAAAA"
-    const val targetCharacteristic = "00010002-0000-1000-8000-00805F9BAAAA"
+    const val targetDeviceName = "negocon-ble"
+    const val serviceUuid = "d973f2e0-b19e-4f7c-a1a2-1c6e7f0c0a01"
+    const val rxUuid = "d973f2e0-b19e-4f7c-a1a2-1c6e7f0c0a02"
+    const val txUuid = "d973f2e0-b19e-4f7c-a1a2-1c6e7f0c0a03"
 }
 
 expect fun createServiceFilter(serviceUuid: String): ServiceFilter
 
 expect fun uuidToString(uuid: Uuid): String
-
-expect fun extractManufacturerIds(raw: Any?): Set<Int>

@@ -9,14 +9,3 @@ actual fun createServiceFilter(serviceUuid: String): ServiceFilter {
 }
 
 actual fun uuidToString(uuid: Uuid): String = uuid.UUIDString
-
-actual fun extractManufacturerIds(raw: Any?): Set<Int> {
-    val data = raw as? ByteArray ?: return emptySet()
-    return parseManufacturerIdsFromBytes(data)
-}
-
-private fun parseManufacturerIdsFromBytes(data: ByteArray): Set<Int> {
-    if (data.size < 2) return emptySet()
-    val manufacturerId = (data[0].toUByte().toInt() or (data[1].toUByte().toInt() shl 8))
-    return setOf(manufacturerId)
-}

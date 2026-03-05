@@ -10,3 +10,5 @@ expect fun writeBleCommand(
     characteristic: BluetoothCharacteristic,
     data: ByteArray
 ): Boolean
+
+expect fun isCharacteristicWritable(characteristic: BluetoothCharacteristic): Boolean

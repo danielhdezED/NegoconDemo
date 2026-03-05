@@ -13,8 +13,8 @@ actual fun writeBleCommand(
     data: ByteArray
 ): Boolean {
     val properties = characteristic.characteristic.properties
-    val canWrite = (properties and CBCharacteristicPropertyWrite) != 0u
-    val canWriteWithoutResponse = (properties and CBCharacteristicPropertyWriteWithoutResponse) != 0u
+    val canWrite = (properties and CBCharacteristicPropertyWrite) != 0UL
+    val canWriteWithoutResponse = (properties and CBCharacteristicPropertyWriteWithoutResponse) != 0UL
     if (!canWrite && !canWriteWithoutResponse) {
         println("Write: not permitted for ${characteristic.uuid}")
         return false
@@ -22,4 +22,11 @@ actual fun writeBleCommand(
     val writeType = if (canWriteWithoutResponse) 1 else null
     blueFalcon.writeCharacteristicWithoutEncoding(peripheral, characteristic, data, writeType)
     return true
+}
+
+actual fun isCharacteristicWritable(characteristic: BluetoothCharacteristic): Boolean {
+    val properties = characteristic.characteristic.properties
+    val canWrite = (properties and CBCharacteristicPropertyWrite) != 0UL
+    val canWriteWithoutResponse = (properties and CBCharacteristicPropertyWriteWithoutResponse) != 0UL
+    return canWrite || canWriteWithoutResponse
 }
